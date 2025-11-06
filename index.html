@@ -70,7 +70,7 @@
             </div>
         </form>
 
-        <!-- Formulário para Adicionar em Massa (CSV) -->
+        <!-- Formulário para Adicionar em Massa (Planilha) -->
         <form id="upload-csv-form" class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
             <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar em Massa (Planilha)</h2>
             <p class="text-sm text-gray-600 mb-4">
@@ -86,7 +86,7 @@
                                   file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100
                                   focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
-                <button type_button id="upload-csv-btn"
+                <button type="button" id="upload-csv-btn"
                         class="px-8 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 flex-shrink-0">
                     Carregar Planilha
                 </button>
@@ -131,8 +131,8 @@
             </div>
         </div>
 
-        <!-- Indicador de Carregamento -->
-        <div id="loading" class="text-center p-10 text-gray-500">
+        <!-- Indicador de Carregamento (agora escondido por padrão) -->
+        <div id="loading" class="text-center p-10 text-gray-500" style="display: none;">
             <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -140,46 +140,15 @@
             <p class="mt-4">Carregando dados...</p>
         </div>
 
-        <!-- ID do Usuário para fins de depuração/compartilhamento -->
-        <div id="user-id-display" class="mt-8 text-center text-xs text-gray-400"></div>
-
     </div>
 
-    <!-- Script de Módulo para Firebase e Lógica da Aplicação -->
-    <script type="module">
-        // Importações do Firebase
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            doc, 
-            addDoc, 
-            deleteDoc, 
-            onSnapshot, 
-            collection,
-            setLogLevel
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Configuração do Firebase (variáveis globais injetadas)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Inicializa Firebase
-        let app, db, auth;
-        let userId = null;
+    <!-- Script de Lógica da Aplicação -->
+    <script>
+        // Variáveis Globais
         let employees = [];
         let currentTab = 'training';
-        let employeesCollectionRef;
         let appUpdateInterval = null; // Variável para controlar o intervalo
-
-        // Configura o nível de log para Debug
-        setLogLevel('Debug');
+        const STORAGE_KEY = 'employeeTrackerData'; // Chave para o localStorage
 
         // Elementos do DOM
         const addForm = document.getElementById('add-employee-form');
@@ -200,9 +169,8 @@
         const finishedEmpty = document.getElementById('finished-empty');
         
         const loading = document.getElementById('loading');
-        const userIdDisplay = document.getElementById('user-id-display');
 
-        // Novos elementos do DOM para upload de CSV
+        // Elementos do DOM para upload
         const uploadCsvForm = document.getElementById('upload-csv-form');
         const csvFileInput = document.getElementById('csv-file');
         const uploadCsvBtn = document.getElementById('upload-csv-btn');
@@ -220,10 +188,16 @@
 
             const [day, month, year] = parts;
             
-            // Verificação simples de formato
-            if (day.length !== 2 || month.length !== 2 || year.length < 4) return null;
+            // Verificação simples de formato (aceita anos com 2 ou 4 dígitos)
+            if (day.length < 1 || day.length > 2 || month.length < 1 || month.length > 2 || year.length < 2 || year.length > 4) return null;
 
-            const isoDate = `${year}-${month}-${day}`;
+            // Garante 2 dígitos para dia/mês e 4 para ano
+            const formattedDay = day.padStart(2, '0');
+            const formattedMonth = month.padStart(2, '0');
+            const formattedYear = year.length === 2 ? `20${year}` : year;
+
+
+            const isoDate = `${formattedYear}-${formattedMonth}-${formattedDay}`;
             
             // Testa se a data ISO criada é válida
             const testDate = new Date(isoDate + 'T00:00:00');
@@ -437,9 +411,29 @@
         }
 
         /**
-         * Adiciona um novo colaborador ao Firestore.
+         * Salva a lista de colaboradores no localStorage.
          */
-        async function handleAddEmployee(e) {
+        function saveEmployees() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+        }
+
+        /**
+         * Carrega a lista de colaboradores do localStorage.
+         */
+        function loadEmployees() {
+            const employeesJSON = localStorage.getItem(STORAGE_KEY);
+            if (employeesJSON) {
+                employees = JSON.parse(employeesJSON);
+            } else {
+                employees = [];
+            }
+            renderApp(); // Renderiza com os dados carregados
+        }
+
+        /**
+         * Adiciona um novo colaborador.
+         */
+        function handleAddEmployee(e) {
             e.preventDefault();
             
             const name = nameInput.value;
@@ -447,28 +441,34 @@
             const startDate = startDateInput.value;
 
             if (!name || !role || !startDate) {
-                // Idealmente, usaríamos um modal, mas por simplicidade:
                 console.error("Por favor, preencha todos os campos.");
                 return;
             }
 
-            try {
-                await addDoc(employeesCollectionRef, {
-                    name,
-                    role,
-                    startDate,
-                    createdAt: new Date()
-                });
+            // Cria um novo objeto de colaborador
+            const newEmployee = {
+                id: crypto.randomUUID(), // Gera um ID único
+                name,
+                role,
+                startDate,
+                createdAt: new Date().toISOString()
+            };
 
-                // Limpa o formulário
-                addForm.reset();
-            } catch (error) {
-                console.error("Erro ao adicionar colaborador: ", error);
-            }
+            // Adiciona ao array
+            employees.push(newEmployee);
+
+            // Salva no localStorage
+            saveEmployees();
+
+            // Atualiza a interface
+            renderApp();
+
+            // Limpa o formulário
+            addForm.reset();
         }
 
         /**
-         * Processa o arquivo CSV e adiciona os colaboradores.
+         * Processa o arquivo de planilha (XLSX ou CSV).
          */
         async function handleUploadCSV(e) {
             e.preventDefault(); // Previne o envio do formulário
@@ -477,12 +477,6 @@
 
             if (!file) {
                 uploadFeedback.textContent = 'Por favor, selecione um arquivo.';
-                uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
-                return;
-            }
-
-            if (!employeesCollectionRef) {
-                uploadFeedback.textContent = 'Erro: Conexão com banco de dados não estabelecida. Tente novamente.';
                 uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
                 return;
             }
@@ -514,8 +508,6 @@
                 const worksheet = workbook.Sheets[sheetName];
 
                 // Converte a planilha para um array de arrays
-                // Usamos 'header: 1' para obter arrays [colA, colB, colC]
-                // 'dateNF' formata as datas lidas para o formato 'dd/mm/aaaa'
                 const rows = XLSX.utils.sheet_to_json(worksheet, {
                     header: 1,
                     raw: false, // Queremos os valores formatados
@@ -524,6 +516,7 @@
 
                 let addedCount = 0;
                 let errorCount = 0;
+                let newEmployees = []; // Array temporário para novos funcionários
 
                 for (const row of rows) {
                     if (!row || row.length < 3) {
@@ -540,24 +533,30 @@
                     const isoDate = convertDateToISO(startDateStr);
 
                     if (name && role && isoDate) {
-                        try {
-                            await addDoc(employeesCollectionRef, {
-                                name: String(name).trim(), // Converte para String por segurança
-                                role: String(role).trim(),
-                                startDate: isoDate,
-                                createdAt: new Date()
-                            });
-                            addedCount++;
-                        } catch (error) {
-                            console.error("Erro ao adicionar linha da planilha: ", row, error);
-                            errorCount++;
-                        }
+                        const newEmployee = {
+                            id: crypto.randomUUID(),
+                            name: String(name).trim(),
+                            role: String(role).trim(),
+                            startDate: isoDate,
+                            createdAt: new Date().toISOString()
+                        };
+                        newEmployees.push(newEmployee);
+                        addedCount++;
                     } else {
                         // Se isoDate for nulo, a linha é ignorada (pode ser o cabeçalho "Data")
                         console.warn("Linha ignorada (formato inválido ou dados faltando): ", row);
                         errorCount++;
                     }
                 }
+
+                // Adiciona os novos funcionários à lista principal
+                employees = [...employees, ...newEmployees];
+
+                // Salva a lista atualizada no localStorage
+                saveEmployees();
+
+                // Atualiza a interface
+                renderApp();
 
                 // Exibe o feedback
                 uploadFeedback.textContent = `${addedCount} colaboradores adicionados com sucesso. ${errorCount} linhas falharam ou foram ignoradas (incluindo cabeçalhos).`;
@@ -578,21 +577,22 @@
         }
 
         /**
-         * Deleta um colaborador do Firestore.
+         * Deleta um colaborador.
          */
-        async function handleDeleteEmployee(e) {
+        function handleDeleteEmployee(e) {
             const deleteButton = e.target.closest('.delete-btn');
             if (!deleteButton) return;
 
             const id = deleteButton.dataset.id;
             
-            // Como não podemos usar window.confirm(), deletamos diretamente.
-            // Em uma app real, implementaríamos um modal de confirmação.
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'employees', id));
-            } catch (error) {
-                console.error("Erro ao deletar colaborador: ", error);
-            }
+            // Filtra o array para remover o colaborador
+            employees = employees.filter(emp => emp.id !== id);
+
+            // Salva a lista atualizada
+            saveEmployees();
+
+            // Atualiza a interface
+            renderApp();
         }
 
         /**
@@ -604,79 +604,43 @@
         }
 
         /**
-         * Inicializa o Firebase e os listeners.
+         * Inicializa a aplicação.
          */
-        async function initFirebase() {
-            try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
+        function initApp() {
+            // Carrega os dados do localStorage
+            loadEmployees();
 
-                // Listener de autenticação
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        userIdDisplay.textContent = `ID de Usuário: ${userId}`;
-                        
-                        // Define a referência da coleção APÓS ter o userId
-                        employeesCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'employees');
-                        
-                        // Inicia o listener de dados
-                        onSnapshot(employeesCollectionRef, (snapshot) => {
-                            employees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                            renderApp();
-                        }, (error) => {
-                            console.error("Erro ao buscar dados: ", error);
-                            loading.innerText = "Erro ao carregar dados.";
-                        });
-
-                        // Limpa o intervalo anterior, se houver
-                        if (appUpdateInterval) {
-                            clearInterval(appUpdateInterval);
-                        }
-                        
-                        // Atualiza a interface a cada minuto para refletir
-                        // mudanças de data (novo dia, mudança de status, alerta de sexta-feira)
-                        appUpdateInterval = setInterval(() => {
-                            console.log("Atualizando interface (verificação de data)...");
-                            renderApp();
-                        }, 60000); // 60000ms = 1 minuto
-
-
-                    } else {
-                        // Se não estiver autenticado, faz o login
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    }
-                });
-
-            } catch (error) {
-                console.error("Erro ao inicializar o Firebase: ", error);
-                loading.innerText = "Erro ao conectar com o banco de dados.";
+            // Limpa o intervalo anterior, se houver
+            if (appUpdateInterval) {
+                clearInterval(appUpdateInterval);
             }
+            
+            // Atualiza a interface a cada minuto para refletir
+            // mudanças de data (novo dia, mudança de status, alerta de sexta-feira)
+            appUpdateInterval = setInterval(() => {
+                console.log("Atualizando interface (verificação de data)...");
+                renderApp();
+            }, 60000); // 60000ms = 1 minuto
+
+            // --- Adiciona os Event Listeners ---
+
+            // Listener do formulário
+            addForm.addEventListener('submit', handleAddEmployee);
+
+            // Listener do formulário de Upload (usando o botão)
+            uploadCsvBtn.addEventListener('click', handleUploadCSV);
+
+            // Listeners das abas
+            tabTraining.addEventListener('click', () => handleChangeTab('training'));
+            tabFinished.addEventListener('click', () => handleChangeTab('finished'));
+
+            // Listeners de deleção (usando delegação de evento)
+            trainingList.addEventListener('click', handleDeleteEmployee);
+            finishedList.addEventListener('click', handleDeleteEmployee);
         }
 
-        // --- Adiciona os Event Listeners ---
-
-        // Listener de carregamento da página
-        document.addEventListener('DOMContentLoaded', initFirebase);
-
-        // Listener do formulário
-        addForm.addEventListener('submit', handleAddEmployee);
-
-        // Listener do formulário de Upload CSV (usando o botão)
-        uploadCsvBtn.addEventListener('click', handleUploadCSV);
-
-        // Listeners das abas
-        tabTraining.addEventListener('click', () => handleChangeTab('training'));
-        tabFinished.addEventListener('click', () => handleChangeTab('finished'));
-
-        // Listeners de deleção (usando delegação de evento)
-        trainingList.addEventListener('click', handleDeleteEmployee);
-        finishedList.addEventListener('click', handleDeleteEmployee);
+        // --- Inicia a Aplicação ---
+        document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 
