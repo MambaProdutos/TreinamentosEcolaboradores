@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Período de Experiência</title>
+    <!-- Carrega o Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carrega a biblioteca PapaParse para ler arquivos CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Carrega a fonte Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Define a fonte Inter como padrão */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Esconde as setas do input de número */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container max-w-5xl mx-auto p-6 bg-white rounded-xl shadow-lg mt-10">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Controle de Período de Experiência</h1>
+            <p class="text-gray-600 mt-2">Adicione novos colaboradores e acompanhe quem está em treinamento.</p>
+        </header>
+
+        <!-- Formulário para Adicionar Colaborador -->
+        <form id="add-employee-form" class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar Novo Colaborador</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Campo Nome -->
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                    <input type="text" id="name" name="name" required
+                           class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Ex: João da Silva">
+                </div>
+                <!-- Campo Função -->
+                <div>
+                    <label for="role" class="block text-sm font-medium text-gray-700 mb-1">Função</label>
+                    <input type="text" id="role" name="role" required
+                           class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Ex: Analista de Vendas">
+                </div>
+                <!-- Campo Data de Entrada -->
+                <div>
+                    <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Data de Entrada</label>
+                    <input type="date" id="start-date" name="start-date" required
+                           class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="mt-6 text-right">
+                <button type="submit"
+                        class="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200">
+                    Adicionar Colaborador
+                </button>
+            </div>
+        </form>
+
+        <!-- Formulário para Adicionar em Massa (CSV) -->
+        <form id="upload-csv-form" class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar em Massa (CSV)</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Carregue um arquivo <strong class="font-medium">.csv</strong> (salve sua planilha Excel nesse formato).
+                <br>As colunas devem ser: <strong class="font-medium">Coluna A: Nome</strong>, <strong class="font-medium">Coluna B: Função</strong>, <strong class="font-medium">Coluna C: Data (dd/mm/aaaa)</strong>.
+            </p>
+            <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                <div class="flex-grow">
+                    <label for="csv-file" class="block text-sm font-medium text-gray-700 mb-1">Arquivo CSV</label>
+                    <input type="file" id="csv-file" name="csv-file" accept=".csv" required
+                           class="w-full p-2 border border-gray-300 rounded-lg shadow-sm file:mr-4 file:py-2 file:px-4
+                                  file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                                  file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100
+                                  focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type_button id="upload-csv-btn"
+                        class="px-8 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 flex-shrink-0">
+                    Carregar Planilha
+                </button>
+            </div>
+            <div id="upload-feedback" class="mt-4 text-sm font-medium"></div>
+        </form>
+
+        <!-- Abas de Navegação -->
+        <div class="mb-6 border-b border-gray-200">
+            <nav class="flex -mb-px" aria-label="Tabs">
+                <button id="tab-training"
+                        class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm text-blue-600 border-blue-600">
+                    Em Treinamento (< 3 Meses)
+                </button>
+                <button id="tab-finished"
+                        class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300">
+                    Experiência Finalizada (3+ Meses)
+                </button>
+            </nav>
+        </div>
+
+        <!-- Container das Listas -->
+        <div id="lists-container">
+            <!-- Lista de Colaboradores em Treinamento -->
+            <div id="training-list-container">
+                <div id="training-list" class="space-y-4">
+                    <!-- Cards de colaboradores em treinamento serão inseridos aqui -->
+                </div>
+                <div id="training-empty" class="text-center p-10 text-gray-500" style="display: none;">
+                    Nenhum colaborador em período de treinamento.
+                </div>
+            </div>
+
+            <!-- Lista de Colaboradores com Experiência Finalizada -->
+            <div id="finished-list-container" style="display: none;">
+                <div id="finished-list" class="space-y-4">
+                    <!-- Cards de colaboradores com experiência finalizada serão inseridos aqui -->
+                </div>
+                <div id="finished-empty" class="text-center p-10 text-gray-500" style="display: none;">
+                    Nenhum colaborador finalizou o período de experiência.
+                </div>
+            </div>
+        </div>
+
+        <!-- Indicador de Carregamento -->
+        <div id="loading" class="text-center p-10 text-gray-500">
+            <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-4">Carregando dados...</p>
+        </div>
+
+        <!-- ID do Usuário para fins de depuração/compartilhamento -->
+        <div id="user-id-display" class="mt-8 text-center text-xs text-gray-400"></div>
+
+    </div>
+
+    <!-- Script de Módulo para Firebase e Lógica da Aplicação -->
+    <script type="module">
+        // Importações do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            addDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuração do Firebase (variáveis globais injetadas)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Inicializa Firebase
+        let app, db, auth;
+        let userId = null;
+        let employees = [];
+        let currentTab = 'training';
+        let employeesCollectionRef;
+        let appUpdateInterval = null; // Variável para controlar o intervalo
+
+        // Configura o nível de log para Debug
+        setLogLevel('Debug');
+
+        // Elementos do DOM
+        const addForm = document.getElementById('add-employee-form');
+        const nameInput = document.getElementById('name');
+        const roleInput = document.getElementById('role');
+        const startDateInput = document.getElementById('start-date');
+
+        const tabTraining = document.getElementById('tab-training');
+        const tabFinished = document.getElementById('tab-finished');
+        
+        const trainingListContainer = document.getElementById('training-list-container');
+        const finishedListContainer = document.getElementById('finished-list-container');
+        
+        const trainingList = document.getElementById('training-list');
+        const finishedList = document.getElementById('finished-list');
+        
+        const trainingEmpty = document.getElementById('training-empty');
+        const finishedEmpty = document.getElementById('finished-empty');
+        
+        const loading = document.getElementById('loading');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // Novos elementos do DOM para upload de CSV
+        const uploadCsvForm = document.getElementById('upload-csv-form');
+        const csvFileInput = document.getElementById('csv-file');
+        const uploadCsvBtn = document.getElementById('upload-csv-btn');
+        const uploadFeedback = document.getElementById('upload-feedback');
+
+
+        /**
+         * Converte data de dd/mm/aaaa para yyyy-mm-dd (ISO).
+         */
+        function convertDateToISO(dateString) {
+            if (!dateString || typeof dateString !== 'string') return null;
+
+            const parts = dateString.split('/');
+            if (parts.length !== 3) return null; // Formato inválido
+
+            const [day, month, year] = parts;
+            
+            // Verificação simples de formato
+            if (day.length !== 2 || month.length !== 2 || year.length < 4) return null;
+
+            const isoDate = `${year}-${month}-${day}`;
+            
+            // Testa se a data ISO criada é válida
+            const testDate = new Date(isoDate + 'T00:00:00');
+            if (isNaN(testDate.getTime())) {
+                console.warn(`Data inválida ignorada: ${dateString}`);
+                return null;
+            }
+            
+            return isoDate; // yyyy-mm-dd
+        }
+
+        /**
+         * Calcula o tempo de casa do colaborador.
+         * Retorna um objeto com dias, meses e se está há menos de 3 meses.
+         */
+        function calculateTenure(startDateString) {
+            // Adiciona T00:00:00 para evitar problemas de fuso horário
+            const startDate = new Date(startDateString + 'T00:00:00');
+            const today = new Date();
+            
+            // Zera a hora de 'today' para comparar apenas datas
+            today.setHours(0, 0, 0, 0);
+
+            // Calcula a data limite (3 meses após a entrada)
+            const threeMonthsLater = new Date(startDate.getTime());
+            threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+
+            const isLessThan3Months = today < threeMonthsLater;
+
+            // Calcula a diferença em dias
+            const diffTime = Math.abs(today.getTime() - startDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            // Calcula meses e dias para exibição
+            let months = 0;
+            let days = 0;
+            
+            let tempDate = new Date(startDate.getTime());
+            while (tempDate < today) {
+                let nextMonth = new Date(tempDate.getTime());
+                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                
+                if (nextMonth <= today) {
+                    months++;
+                    tempDate = nextMonth;
+                } else {
+                    break;
+                }
+            }
+
+            const daysDiff = (today.getTime() - tempDate.getTime()) / (1000 * 60 * 60 * 24);
+            days = Math.floor(daysDiff);
+
+            // Ajuste para o primeiro dia
+            if (diffTime === 0) {
+                days = 0;
+                months = 0;
+            }
+            
+            if (months === 0 && days === 0 && diffTime > 0) {
+                 days = diffDays; // Fallback se o cálculo de meses falhar
+            }
+            
+            // Caso especial: hoje é o dia de início
+             if (startDate.getTime() === today.getTime()) {
+                days = 0;
+                months = 0;
+            }
+
+            return {
+                totalDays: diffDays,
+                months,
+                days,
+                isLessThan3Months
+            };
+        }
+
+        /**
+         * Formata o tempo de casa para exibição.
+         */
+        function formatTenure(tenure) {
+            if (tenure.months > 0) {
+                return `${tenure.months} ${tenure.months > 1 ? 'meses' : 'mês'} e ${tenure.days} ${tenure.days > 1 ? 'dias' : 'dia'}`;
+            }
+            if (tenure.totalDays === 1) {
+                return '1 dia';
+            }
+            // Caso do dia de início
+            if (tenure.totalDays === 0) {
+                return 'Hoje';
+            }
+            return `${tenure.totalDays} dias`;
+        }
+
+        /**
+         * Renderiza a aplicação (listas e abas).
+         */
+        function renderApp() {
+            // Esconde o loading
+            loading.style.display = 'none';
+            
+            // Atualiza visibilidade das abas
+            trainingListContainer.style.display = currentTab === 'training' ? 'block' : 'none';
+            finishedListContainer.style.display = currentTab === 'finished' ? 'block' : 'none';
+
+            // Atualiza estilo das abas
+            if (currentTab === 'training') {
+                tabTraining.classList.add('text-blue-600', 'border-blue-600');
+                tabTraining.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+                tabFinished.classList.add('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+                tabFinished.classList.remove('text-blue-600', 'border-blue-600');
+            } else {
+                tabFinished.classList.add('text-blue-600', 'border-blue-600');
+                tabFinished.classList.remove('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+                tabTraining.classList.add('text-gray-500', 'border-transparent', 'hover:text-gray-700', 'hover:border-gray-300');
+                tabTraining.classList.remove('text-blue-600', 'border-blue-600');
+            }
+
+            // Limpa as listas
+            trainingList.innerHTML = '';
+            finishedList.innerHTML = '';
+
+            const today = new Date();
+            const isFriday = today.getDay() === 5; // 0=Domingo, 5=Sexta
+
+            let trainingCount = 0;
+            let finishedCount = 0;
+            
+            // Ordena os funcionários pela data de entrada (mais recentes primeiro)
+            const sortedEmployees = [...employees].sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
+            sortedEmployees.forEach(emp => {
+                const tenure = calculateTenure(emp.startDate);
+                const tenureText = formatTenure(tenure);
+                const formattedStartDate = new Date(emp.startDate + 'T00:00:00').toLocaleDateString('pt-BR');
+
+                if (tenure.isLessThan3Months) {
+                    // Colaborador EM TREINAMENTO
+                    trainingCount++;
+                    const card = document.createElement('div');
+                    card.className = 'flex flex-wrap sm:flex-nowrap justify-between items-center p-5 bg-white border border-gray-200 rounded-lg shadow-sm';
+                    
+                    let trainingBadge;
+                    if (isFriday) {
+                        // SEXTA-FEIRA = DIA DE TREINAMENTO OBRIGATÓRIO
+                        trainingBadge = `
+                            <span class="inline-flex items-center px-4 py-1 rounded-full text-sm font-bold text-white bg-red-600 animate-pulse">
+                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                TREINAMENTO HOJE
+                            </span>`;
+                    } else {
+                        trainingBadge = `
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-yellow-800 bg-yellow-200">
+                                Em Treinamento
+                            </span>`;
+                    }
+                    
+                    card.innerHTML = `
+                        <div class="flex-grow mb-4 sm:mb-0">
+                            <h3 class="text-lg font-bold text-gray-800">${emp.name}</h3>
+                            <p class="text-sm text-gray-600">${emp.role}</p>
+                            <p class="text-sm text-gray-500 mt-1">Entrada: ${formattedStartDate}</p>
+                        </div>
+                        <div class="flex flex-col items-start sm:items-end w-full sm:w-auto">
+                            ${trainingBadge}
+                            <p class="text-md font-semibold text-gray-700 mt-2">
+                                Tempo de casa: ${tenureText}
+                            </p>
+                        </div>
+                        <button data-id="${emp.id}" class="delete-btn ml-0 sm:ml-4 mt-4 sm:mt-0 flex-shrink-0 w-10 h-10 flex items-center justify-center bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    `;
+                    trainingList.appendChild(card);
+
+                } else {
+                    // Colaborador com EXPERIÊNCIA FINALIZADA
+                    finishedCount++;
+                    const card = document.createElement('div');
+                    card.className = 'flex flex-wrap sm:flex-nowrap justify-between items-center p-5 bg-white border border-gray-200 rounded-lg shadow-sm';
+                    
+                    card.innerHTML = `
+                        <div class="flex-grow mb-4 sm:mb-0">
+                            <h3 class="text-lg font-bold text-gray-800">${emp.name}</h3>
+                            <p class="text-sm text-gray-600">${emp.role}</p>
+                             <p class="text-sm text-gray-500 mt-1">Entrada: ${formattedStartDate}</p>
+                        </div>
+                        <div class="flex flex-col items-start sm:items-end w-full sm:w-auto">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-green-800 bg-green-200">
+                                Experiência Concluída
+                            </span>
+                            <p class="text-md font-semibold text-gray-700 mt-2">
+                                Tempo de casa: ${tenureText}
+                            </p>
+                        </div>
+                        <button data-id="${emp.id}" class="delete-btn ml-0 sm:ml-4 mt-4 sm:mt-0 flex-shrink-0 w-10 h-10 flex items-center justify-center bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    `;
+                    finishedList.appendChild(card);
+                }
+            });
+
+            // Atualiza contagem nas abas
+            tabTraining.innerText = `Em Treinamento (${trainingCount})`;
+            tabFinished.innerText = `Experiência Finalizada (${finishedCount})`;
+            
+            // Exibe mensagens de "vazio" se necessário
+            trainingEmpty.style.display = trainingCount === 0 ? 'block' : 'none';
+            finishedEmpty.style.display = finishedCount === 0 ? 'block' : 'none';
+        }
+
+        /**
+         * Adiciona um novo colaborador ao Firestore.
+         */
+        async function handleAddEmployee(e) {
+            e.preventDefault();
+            
+            const name = nameInput.value;
+            const role = roleInput.value;
+            const startDate = startDateInput.value;
+
+            if (!name || !role || !startDate) {
+                // Idealmente, usaríamos um modal, mas por simplicidade:
+                console.error("Por favor, preencha todos os campos.");
+                return;
+            }
+
+            try {
+                await addDoc(employeesCollectionRef, {
+                    name,
+                    role,
+                    startDate,
+                    createdAt: new Date()
+                });
+
+                // Limpa o formulário
+                addForm.reset();
+            } catch (error) {
+                console.error("Erro ao adicionar colaborador: ", error);
+            }
+        }
+
+        /**
+         * Processa o arquivo CSV e adiciona os colaboradores.
+         */
+        async function handleUploadCSV(e) {
+            e.preventDefault(); // Previne o envio do formulário
+            
+            const file = csvFileInput.files[0];
+
+            if (!file) {
+                uploadFeedback.textContent = 'Por favor, selecione um arquivo.';
+                uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
+                return;
+            }
+
+            if (!employeesCollectionRef) {
+                uploadFeedback.textContent = 'Erro: Conexão com banco de dados não estabelecida. Tente novamente.';
+                uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
+                return;
+            }
+
+            uploadFeedback.textContent = 'Processando arquivo...';
+            uploadFeedback.className = 'mt-4 text-sm font-medium text-blue-600';
+
+            Papa.parse(file, {
+                header: false, // O usuário especificou Coluna A, B, C (sem cabeçalho)
+                skipEmptyLines: true,
+                complete: async function(results) {
+                    const data = results.data;
+                    let addedCount = 0;
+                    let errorCount = 0;
+
+                    for (const row of data) {
+                        const name = row[0];
+                        const role = row[1];
+                        const startDateStr = row[2];
+
+                        // Converte a data para o formato yyyy-mm-dd
+                        const isoDate = convertDateToISO(startDateStr);
+
+                        if (name && role && isoDate) {
+                            try {
+                                await addDoc(employeesCollectionRef, {
+                                    name: name.trim(),
+                                    role: role.trim(),
+                                    startDate: isoDate,
+                                    createdAt: new Date()
+                                });
+                                addedCount++;
+                            } catch (error) {
+                                console.error("Erro ao adicionar linha da planilha: ", row, error);
+                                errorCount++;
+                            }
+                        } else {
+                            console.warn("Linha ignorada (formato inválido ou dados faltando): ", row);
+                            errorCount++;
+                        }
+                    }
+
+                    // Exibe o feedback
+                    uploadFeedback.textContent = `${addedCount} colaboradores adicionados com sucesso. ${errorCount} linhas falharam ou foram ignoradas.`;
+                    uploadFeedback.className = 'mt-4 text-sm font-medium text-green-700';
+                    
+                    // Limpa o input do arquivo
+                    uploadCsvForm.reset();
+                },
+                error: function(err, file) {
+                    console.error("Erro ao processar o arquivo CSV:", err);
+                    uploadFeedback.textContent = 'Erro ao ler o arquivo CSV. Verifique o formato.';
+                    uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
+                }
+            });
+        }
+
+        /**
+         * Deleta um colaborador do Firestore.
+         */
+        async function handleDeleteEmployee(e) {
+            const deleteButton = e.target.closest('.delete-btn');
+            if (!deleteButton) return;
+
+            const id = deleteButton.dataset.id;
+            
+            // Como não podemos usar window.confirm(), deletamos diretamente.
+            // Em uma app real, implementaríamos um modal de confirmação.
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'employees', id));
+            } catch (error) {
+                console.error("Erro ao deletar colaborador: ", error);
+            }
+        }
+
+        /**
+         * Troca a aba ativa.
+         */
+        function handleChangeTab(tab) {
+            currentTab = tab;
+            renderApp();
+        }
+
+        /**
+         * Inicializa o Firebase e os listeners.
+         */
+        async function initFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Listener de autenticação
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = `ID de Usuário: ${userId}`;
+                        
+                        // Define a referência da coleção APÓS ter o userId
+                        employeesCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'employees');
+                        
+                        // Inicia o listener de dados
+                        onSnapshot(employeesCollectionRef, (snapshot) => {
+                            employees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            renderApp();
+                        }, (error) => {
+                            console.error("Erro ao buscar dados: ", error);
+                            loading.innerText = "Erro ao carregar dados.";
+                        });
+
+                        // Limpa o intervalo anterior, se houver
+                        if (appUpdateInterval) {
+                            clearInterval(appUpdateInterval);
+                        }
+                        
+                        // Atualiza a interface a cada minuto para refletir
+                        // mudanças de data (novo dia, mudança de status, alerta de sexta-feira)
+                        appUpdateInterval = setInterval(() => {
+                            console.log("Atualizando interface (verificação de data)...");
+                            renderApp();
+                        }, 60000); // 60000ms = 1 minuto
+
+
+                    } else {
+                        // Se não estiver autenticado, faz o login
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro ao inicializar o Firebase: ", error);
+                loading.innerText = "Erro ao conectar com o banco de dados.";
+            }
+        }
+
+        // --- Adiciona os Event Listeners ---
+
+        // Listener de carregamento da página
+        document.addEventListener('DOMContentLoaded', initFirebase);
+
+        // Listener do formulário
+        addForm.addEventListener('submit', handleAddEmployee);
+
+        // Listener do formulário de Upload CSV (usando o botão)
+        uploadCsvBtn.addEventListener('click', handleUploadCSV);
+
+        // Listeners das abas
+        tabTraining.addEventListener('click', () => handleChangeTab('training'));
+        tabFinished.addEventListener('click', () => handleChangeTab('finished'));
+
+        // Listeners de deleção (usando delegação de evento)
+        trainingList.addEventListener('click', handleDeleteEmployee);
+        finishedList.addEventListener('click', handleDeleteEmployee);
+
+    </script>
+
+</body>
+</html>
