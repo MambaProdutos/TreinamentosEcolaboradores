@@ -6,8 +6,8 @@
     <title>Controle de Período de Experiência</title>
     <!-- Carrega o Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Carrega a biblioteca PapaParse para ler arquivos CSV -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Carrega a biblioteca SheetJS (xlsx.js) para ler arquivos .xlsx e .csv -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Carrega a fonte Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,15 +72,15 @@
 
         <!-- Formulário para Adicionar em Massa (CSV) -->
         <form id="upload-csv-form" class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
-            <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar em Massa (CSV)</h2>
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar em Massa (Planilha)</h2>
             <p class="text-sm text-gray-600 mb-4">
-                Carregue um arquivo <strong class="font-medium">.csv</strong> (salve sua planilha Excel nesse formato).
+                Carregue um arquivo <strong class="font-medium">.xlsx</strong> ou <strong class="font-medium">.csv</strong>.
                 <br>As colunas devem ser: <strong class="font-medium">Coluna A: Nome</strong>, <strong class="font-medium">Coluna B: Função</strong>, <strong class="font-medium">Coluna C: Data (dd/mm/aaaa)</strong>.
             </p>
             <div class="flex flex-col sm:flex-row sm:items-end gap-4">
                 <div class="flex-grow">
-                    <label for="csv-file" class="block text-sm font-medium text-gray-700 mb-1">Arquivo CSV</label>
-                    <input type="file" id="csv-file" name="csv-file" accept=".csv" required
+                    <label for="csv-file" class="block text-sm font-medium text-gray-700 mb-1">Arquivo da Planilha</label>
+                    <input type="file" id="csv-file" name="csv-file" accept=".csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required
                            class="w-full p-2 border border-gray-300 rounded-lg shadow-sm file:mr-4 file:py-2 file:px-4
                                   file:rounded-lg file:border-0 file:text-sm file:font-semibold
                                   file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100
@@ -490,54 +490,91 @@
             uploadFeedback.textContent = 'Processando arquivo...';
             uploadFeedback.className = 'mt-4 text-sm font-medium text-blue-600';
 
-            Papa.parse(file, {
-                header: false, // O usuário especificou Coluna A, B, C (sem cabeçalho)
-                skipEmptyLines: true,
-                complete: async function(results) {
-                    const data = results.data;
-                    let addedCount = 0;
-                    let errorCount = 0;
+            // Usa FileReader para ler o arquivo (Excel ou CSV)
+            const reader = new FileReader();
+            
+            reader.onload = async function(event) {
+                const data = event.target.result;
+                let workbook;
+                
+                try {
+                    // Tenta ler o arquivo usando SheetJS
+                    workbook = XLSX.read(data, { 
+                        type: 'binary' // Lê como string binária
+                    });
+                } catch (readErr) {
+                    console.error("Erro ao processar o arquivo:", readErr);
+                    uploadFeedback.textContent = 'Falha ao processar o arquivo. Verifique se não está corrompido.';
+                    uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
+                    return;
+                }
 
-                    for (const row of data) {
-                        const name = row[0];
-                        const role = row[1];
-                        const startDateStr = row[2];
+                // Pega a primeira planilha do arquivo
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
 
-                        // Converte a data para o formato yyyy-mm-dd
-                        const isoDate = convertDateToISO(startDateStr);
+                // Converte a planilha para um array de arrays
+                // Usamos 'header: 1' para obter arrays [colA, colB, colC]
+                // 'dateNF' formata as datas lidas para o formato 'dd/mm/aaaa'
+                const rows = XLSX.utils.sheet_to_json(worksheet, {
+                    header: 1,
+                    raw: false, // Queremos os valores formatados
+                    dateNF: 'dd/mm/aaaa' // Formata datas para o padrão esperado
+                });
 
-                        if (name && role && isoDate) {
-                            try {
-                                await addDoc(employeesCollectionRef, {
-                                    name: name.trim(),
-                                    role: role.trim(),
-                                    startDate: isoDate,
-                                    createdAt: new Date()
-                                });
-                                addedCount++;
-                            } catch (error) {
-                                console.error("Erro ao adicionar linha da planilha: ", row, error);
-                                errorCount++;
-                            }
-                        } else {
-                            console.warn("Linha ignorada (formato inválido ou dados faltando): ", row);
+                let addedCount = 0;
+                let errorCount = 0;
+
+                for (const row of rows) {
+                    if (!row || row.length < 3) {
+                        console.warn("Linha ignorada (vazia ou incompleta): ", row);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    const name = row[0];
+                    const role = row[1];
+                    const startDateStr = row[2]; // Deve vir como 'dd/mm/aaaa'
+
+                    // Converte a data para o formato yyyy-mm-dd
+                    const isoDate = convertDateToISO(startDateStr);
+
+                    if (name && role && isoDate) {
+                        try {
+                            await addDoc(employeesCollectionRef, {
+                                name: String(name).trim(), // Converte para String por segurança
+                                role: String(role).trim(),
+                                startDate: isoDate,
+                                createdAt: new Date()
+                            });
+                            addedCount++;
+                        } catch (error) {
+                            console.error("Erro ao adicionar linha da planilha: ", row, error);
                             errorCount++;
                         }
+                    } else {
+                        // Se isoDate for nulo, a linha é ignorada (pode ser o cabeçalho "Data")
+                        console.warn("Linha ignorada (formato inválido ou dados faltando): ", row);
+                        errorCount++;
                     }
-
-                    // Exibe o feedback
-                    uploadFeedback.textContent = `${addedCount} colaboradores adicionados com sucesso. ${errorCount} linhas falharam ou foram ignoradas.`;
-                    uploadFeedback.className = 'mt-4 text-sm font-medium text-green-700';
-                    
-                    // Limpa o input do arquivo
-                    uploadCsvForm.reset();
-                },
-                error: function(err, file) {
-                    console.error("Erro ao processar o arquivo CSV:", err);
-                    uploadFeedback.textContent = 'Erro ao ler o arquivo CSV. Verifique o formato.';
-                    uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
                 }
-            });
+
+                // Exibe o feedback
+                uploadFeedback.textContent = `${addedCount} colaboradores adicionados com sucesso. ${errorCount} linhas falharam ou foram ignoradas (incluindo cabeçalhos).`;
+                uploadFeedback.className = 'mt-4 text-sm font-medium text-green-700';
+                
+                // Limpa o input do arquivo
+                uploadCsvForm.reset();
+            };
+
+            reader.onerror = function(ex) {
+                console.error("Erro ao ler o arquivo:", ex);
+                uploadFeedback.textContent = 'Erro ao ler o arquivo.';
+                uploadFeedback.className = 'mt-4 text-sm font-medium text-red-600';
+            };
+
+            // Inicia a leitura do arquivo como string binária
+            reader.readAsBinaryString(file);
         }
 
         /**
